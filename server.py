@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -7,6 +8,7 @@ mcp = FastMCP("dynatrace")
 
 ENV_URL = os.environ.get("DYNATRACE_ENV_URL", "").rstrip("/")
 API_TOKEN = os.environ.get("DYNATRACE_API_TOKEN", "")
+TEAMS_WEBHOOK_URL = os.environ.get("TEAMS_WEBHOOK_URL", "")
 
 _HEADERS = {"Authorization": f"Api-Token {API_TOKEN}"}
 
@@ -137,6 +139,102 @@ def get_problem_comments(problem_id: str) -> str:
         lines.append(f"- **{author}** ({created}):\n  {text}")
 
     return "\n".join(lines)
+
+
+def _severity_color(severity: str) -> str:
+    colors = {
+        "RESOURCE_CONTENTION": "warning",
+        "ERROR": "attention",
+        "AVAILABILITY": "attention",
+        "PERFORMANCE": "warning",
+        "CUSTOM_ALERT": "accent",
+    }
+    return colors.get(severity, "default")
+
+
+def _build_adaptive_card(problems: list[dict], title: str) -> dict:
+    now = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
+    facts = []
+    for p in problems[:20]:
+        severity = p.get("severityLevel", "?")
+        impact = p.get("impactLevel", "?")
+        facts.append({
+            "title": f"[{severity}] {p.get('title', '?')}",
+            "value": f"Impacto: {impact} | ID: {p.get('problemId', '?')}",
+        })
+
+    card = {
+        "type": "message",
+        "attachments": [{
+            "contentType": "application/vnd.microsoft.card.adaptive",
+            "content": {
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "type": "AdaptiveCard",
+                "version": "1.4",
+                "body": [
+                    {
+                        "type": "TextBlock",
+                        "size": "large",
+                        "weight": "bolder",
+                        "text": title,
+                        "style": "heading",
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": f"{len(problems)} problema(s) | {now}",
+                        "isSubtle": True,
+                        "spacing": "none",
+                    },
+                    {
+                        "type": "FactSet",
+                        "facts": facts,
+                    },
+                ],
+                "actions": [{
+                    "type": "Action.OpenUrl",
+                    "title": "Abrir Dynatrace",
+                    "url": f"{ENV_URL}/#problems",
+                }],
+            },
+        }],
+    }
+    return card
+
+
+@mcp.tool()
+def notify_teams(
+    from_time: str = "now-2h",
+    message: str = "",
+) -> str:
+    """Envia problemas abertos do Dynatrace para o Microsoft Teams via webhook.
+
+    Args:
+        from_time: Período de busca (ex: 'now-2h', 'now-1d')
+        message: Mensagem adicional opcional para incluir no card
+    """
+    if not TEAMS_WEBHOOK_URL:
+        return "Erro: variável TEAMS_WEBHOOK_URL não configurada."
+
+    data = _api_get(
+        "/api/v2/problems",
+        params={
+            "problemSelector": 'status("OPEN")',
+            "from": from_time,
+            "to": "now",
+        },
+    )
+
+    problems = data.get("problems", [])
+    if not problems:
+        return f"Nenhum problema aberto no período {from_time} → now. Nada enviado."
+
+    title = message if message else "Dynatrace — Problemas Abertos"
+    card = _build_adaptive_card(problems, title)
+
+    resp = httpx.post(TEAMS_WEBHOOK_URL, json=card, timeout=15)
+    resp.raise_for_status()
+
+    return f"Notificação enviada ao Teams com {len(problems)} problema(s)."
 
 
 @mcp.tool()
