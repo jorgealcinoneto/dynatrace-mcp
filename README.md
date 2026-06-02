@@ -1,6 +1,6 @@
 # Dynatrace MCP Server
 
-Servidor MCP que conecta o Claude Code ao Dynatrace para monitorar e gerenciar problemas de infraestrutura e serviços.
+Servidor [MCP](https://modelcontextprotocol.io) que conecta **Cursor**, **Claude Code** e outros clientes MCP ao **Dynatrace** para monitorar e gerenciar problemas de infraestrutura e serviços.
 
 ## Funcionalidades
 
@@ -10,21 +10,48 @@ Servidor MCP que conecta o Claude Code ao Dynatrace para monitorar e gerenciar p
 - `notify_teams` — Envia problemas abertos para o Microsoft Teams via webhook
 - `close_problem` — Fecha um problema com mensagem
 
+## Pré-requisitos
+
+- Python 3.10+
+- Git
+- Token Dynatrace com `problems.read` e `problems.write` (para fechar problemas)
+- *(Opcional)* Webhook do Microsoft Teams
+
 ## Instalação
 
+### Linux / macOS
+
 ```bash
-# 1. Clonar o repositório
-git clone <url-do-repo> ~/dev/dynatrace-mcp
+git clone https://github.com/jorgealcinoneto/dynatrace-mcp.git ~/dev/dynatrace-mcp
 cd ~/dev/dynatrace-mcp
 
-# 2. Instalar dependências
-pip3 install mcp[cli] httpx --break-system-packages
+pip3 install "mcp[cli]" httpx
 
-# 3. Configurar variáveis de ambiente (adicionar ao ~/.zshrc ou ~/.bashrc)
 export DYNATRACE_ENV_URL="https://SEU-AMBIENTE.live.dynatrace.com"
 export DYNATRACE_API_TOKEN="dt0c01.XXXXX..."
 export TEAMS_WEBHOOK_URL="https://xxx.webhook.office.com/..."
 ```
+
+Persistir variáveis em `~/.bashrc` ou `~/.zshrc`.
+
+### Windows (PowerShell)
+
+```powershell
+git clone https://github.com/jorgealcinoneto/dynatrace-mcp.git $env:USERPROFILE\dev\dynatrace-mcp
+cd $env:USERPROFILE\dev\dynatrace-mcp
+
+python -m pip install "mcp[cli]" httpx
+
+$env:DYNATRACE_ENV_URL = "https://SEU-AMBIENTE.live.dynatrace.com"
+$env:DYNATRACE_API_TOKEN = "dt0c01.XXXXX..."
+$env:TEAMS_WEBHOOK_URL = "https://xxx.webhook.office.com/..."
+
+setx DYNATRACE_ENV_URL "https://SEU-AMBIENTE.live.dynatrace.com"
+setx DYNATRACE_API_TOKEN "dt0c01.XXXXX..."
+setx TEAMS_WEBHOOK_URL "https://xxx.webhook.office.com/..."
+```
+
+> **Dica:** se `python` não for reconhecido, instale em [python.org](https://www.python.org/downloads/) com **Add Python to PATH** ou use `py -3` no lugar de `python`.
 
 ### Token de API (Dynatrace)
 
@@ -41,13 +68,9 @@ Em: **Settings > Integration > Dynatrace API > Generate token**
 2. Clique em **...** > **Workflows** > **Post to a channel when a webhook request is received**
 3. Copie a URL gerada e configure em `TEAMS_WEBHOOK_URL`
 
-## Registrar no Claude Code
+## Registrar no Cursor
 
-```bash
-claude mcp add dynatrace -- python3 ~/dev/dynatrace-mcp/server.py
-```
-
-Ou adicione manualmente ao `~/.claude/.mcp.json`:
+Adicione em `~/.cursor/mcp.json` (Linux/macOS) ou `%USERPROFILE%\.cursor\mcp.json` (Windows):
 
 ```json
 {
@@ -66,7 +89,30 @@ Ou adicione manualmente ao `~/.claude/.mcp.json`:
 }
 ```
 
-## Uso no Claude Code
+Exemplo Windows (`cwd`):
+
+```json
+"cwd": "C:\\Users\\SEU_USUARIO\\dev\\dynatrace-mcp",
+"command": "python"
+```
+
+Reinicie o Cursor após salvar.
+
+## Registrar no Claude Code
+
+```bash
+claude mcp add dynatrace -- python3 ~/dev/dynatrace-mcp/server.py
+```
+
+Windows:
+
+```powershell
+claude mcp add dynatrace -- python "$env:USERPROFILE\dev\dynatrace-mcp\server.py"
+```
+
+Ou adicione manualmente ao `~/.claude/.mcp.json` (mesma estrutura do Cursor acima).
+
+## Uso
 
 ```
 > liste os problemas abertos no dynatrace
